@@ -26,3 +26,18 @@ CHANNELS = {
 }
 ```
 
+Lag et python virtual environment:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Installér nødvendige biblioteker
+
+```sh
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Snurr film!
