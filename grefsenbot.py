@@ -415,6 +415,119 @@ def kick_request(command: str):
 
 
 # ----------------------------------------------------------------------
+# Kjeldekode / source
+# ----------------------------------------------------------------------
+
+SOURCE_WORDS = {
+    # Norsk bokmål og dansk (same stavemåte)
+    "kilde": "no",
+    "kildekode": "no",
+
+    # Nynorsk
+    "kjelde": "nn",
+    "kjeldekode": "nn",
+
+    # Svensk
+    "kalla": "sv",
+    "källkod": "sv",
+
+    # Islandsk
+    "heimild": "is",
+    "frumkóði": "is",
+
+    # Engelsk
+    "source": "en",
+    "sourcecode": "en",
+    "source code": "en",
+
+    # Scots
+    "soorce": "sco",
+    "soorcecode": "sco",
+    "soorce code": "sco",
+
+    # Tysk
+    "quelle": "de",
+    "quellcode": "de",
+
+    # Nederlandsk
+    "bron": "nl",
+    "broncode": "nl",
+
+    # Polsk
+    "źródło": "pl",
+    "zrodlo": "pl",
+    "kod": "pl",
+
+    # Finsk
+    "lähde": "fi",
+    "lähdekoodi": "fi",
+}
+
+
+SOURCE_REPLIES = {
+    "nn": (
+        "Kjeldekoden finn du på https://github.com/rkarlsba/grefsenbot "
+        "– lisensen står i LICENSE.md."
+    ),
+    "no": (
+        "Kildekoden finner du på https://github.com/rkarlsba/grefsenbot "
+        "– lisensen står i LICENSE.md."
+    ),
+    "sv": (
+        "Källkoden hittar du på https://github.com/rkarlsba/grefsenbot "
+        "– licensen finns i LICENSE.md."
+    ),
+    "is": (
+        "Frumkóðinn er á https://github.com/rkarlsba/grefsenbot "
+        "– leyfið er í LICENSE.md."
+    ),
+    "en": (
+        "The source code is at https://github.com/rkarlsba/grefsenbot "
+        "– see LICENSE.md for the license."
+    ),
+    "sco": (
+        "The soorce code is at https://github.com/rkarlsba/grefsenbot "
+        "– the licence is in LICENSE.md."
+    ),
+    "de": (
+        "Den Quellcode findest du unter https://github.com/rkarlsba/grefsenbot "
+        "– die Lizenz steht in LICENSE.md."
+    ),
+    "nl": (
+        "De broncode vind je op https://github.com/rkarlsba/grefsenbot "
+        "– de licentie staat in LICENSE.md."
+    ),
+    "pl": (
+        "Kod źródłowy znajdziesz na https://github.com/rkarlsba/grefsenbot "
+        "– licencja jest w pliku LICENSE.md."
+    ),
+    "fi": (
+        "Lähdekoodi löytyy osoitteesta https://github.com/rkarlsba/grefsenbot "
+        "– lisenssi on tiedostossa LICENSE.md."
+    ),
+}
+
+
+def source_request(command: str):
+    """
+    Gjenkjenner kjeldekode-kommando og returnerer:
+        (is_source, language)
+    """
+
+    words = command.strip().split(maxsplit=1)
+
+    if not words:
+        return False, None
+
+    language = SOURCE_WORDS.get(words[0].casefold())
+
+    if language is None:
+        return False, None
+
+    return True, language
+
+
+# ----------------------------------------------------------------------
 # MeshCore-kanaler
 # ----------------------------------------------------------------------
 
@@ -1126,6 +1239,19 @@ async def main():
             )
             return
 
+        # Kjeldekode
+        is_source, source_language = source_request(command)
+
+        if is_source:
+            await reply(
+                channel_idx,
+                SOURCE_REPLIES.get(
+                    source_language,
+                    SOURCE_REPLIES["en"],
+                ),
+            )
+            return
+
         # Vær
         is_weather, place, language, forecast_day = weather_request(
             command
@@ -1227,7 +1353,7 @@ async def main():
                 await reply(
                     channel_idx,
                     ",ping ,pang ,kick <navn> ,spark <navn> ,vær <sted> "
-                    "[i dag/i morgon/ukedag/om N dagar]",
+                    "[i dag/i morgon/ukedag/om N dagar] ,kilde",
                 )
 
             # Ukjent kommando: vær stille.
