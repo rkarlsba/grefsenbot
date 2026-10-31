@@ -12,6 +12,7 @@ import logging
 import logging.handlers
 import re
 import sys
+import unicodedata
 import urllib.parse
 import urllib.request
 from collections import defaultdict, deque
@@ -93,6 +94,32 @@ channel_history = defaultdict(
 # ----------------------------------------------------------------------
 # Språk
 # ----------------------------------------------------------------------
+
+def normalize_command_text(text: str):
+    transliterated = text.casefold().translate(
+        str.maketrans({
+            "ð": "d",
+            "þ": "th",
+            "æ": "ae",
+            "ø": "o",
+            "ł": "l",
+            "ß": "ss",
+        })
+    )
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKD", transliterated)
+        if not unicodedata.combining(character)
+    )
+
+
+def lookup_command_word(word: str, command_words: dict):
+    normalized_word = normalize_command_text(word)
+    for known_word, language in command_words.items():
+        if normalize_command_text(known_word) == normalized_word:
+            return language
+    return None
+
 
 WEATHER_WORDS = {
     # Generell
@@ -402,7 +429,7 @@ def kick_request(command: str):
     if not words:
         return False, None, None
 
-    language = KICK_WORDS.get(words[0].casefold())
+    language = lookup_command_word(words[0], KICK_WORDS)
 
     if language is None:
         return False, None, None
@@ -477,6 +504,10 @@ SOURCE_REPLIES = {
         "Källkoden hittar du på https://github.com/rkarlsba/grefsenbot "
         "– licensen finns i LICENSE.md."
     ),
+    "da": (
+        "Kildekoden finder du på https://github.com/rkarlsba/grefsenbot "
+        "– licensen står i LICENSE.md."
+    ),
     "is": (
         "Frumkóðinn er á https://github.com/rkarlsba/grefsenbot "
         "– leyfið er í LICENSE.md."
@@ -519,7 +550,14 @@ def source_request(command: str):
     if not words:
         return False, None
 
-    language = SOURCE_WORDS.get(words[0].casefold())
+    if (
+        len(words) > 1
+        and normalize_command_text(words[0]) == "dansk"
+        and normalize_command_text(words[1]) in {"kilde", "kildekode"}
+    ):
+        return True, "da"
+
+    language = lookup_command_word(words[0], SOURCE_WORDS)
 
     if language is None:
         return False, None
@@ -549,6 +587,91 @@ def parse_command(message: str):
 
     command = message[1:].strip()
     return command or None
+
+
+HELP_WORDS = {
+    "hjelp": "no",
+    "help": "en",
+    "help in scots": "sco",
+    "hjälp": "sv",
+    "hjælp": "da",
+    "hjálp": "is",
+    "hilfe": "de",
+    "hulp": "nl",
+    "pomoc": "pl",
+    "apua": "fi",
+    "hjelp på nynorsk": "nn",
+}
+
+
+HELP_LABELS = {
+    "nn": ("Kommandoar", "Helsingar", "Spark", "Kjelde", "Vêr"),
+    "no": ("Kommandoer", "Hilsener", "Spark", "Kilde", "Vær"),
+    "sv": ("Kommandon", "Hälsningar", "Sparka", "Källa", "Väder"),
+    "da": ("Kommandoer", "Hilsner", "Spark", "Kilde", "Vejr"),
+    "is": ("Skipanir", "Kveðjur", "Sparka", "Heimild", "Veður"),
+    "en": ("Commands", "Greetings", "Kick", "Source", "Weather"),
+    "sco": ("Commands", "Greetins", "Skelp", "Soorce", "Wather"),
+    "de": ("Befehle", "Grüße", "Tritt", "Quelle", "Wetter"),
+    "nl": ("Opdrachten", "Begroetingen", "Schop", "Bron", "Weer"),
+    "pl": ("Polecenia", "Powitania", "Kopnij", "Źródło", "Pogoda"),
+    "fi": ("Komennot", "Tervehdykset", "Potkaise", "Lähde", "Sää"),
+}
+
+
+HELP_DATE_HINTS = {
+    "nn": "Vêr tek òg dato: i dag, i morgon, vekedag eller om N dagar.",
+    "no": "Vær tar også dato: i dag, i morgen, ukedag eller om N dager.",
+    "sv": "Väder tar även datum: idag, imorgon, veckodag eller om N dagar.",
+    "da": "Vejr tager også dato: i dag, i morgen, ugedag eller om N dage.",
+    "is": "Veður tekur líka dagsetningu: í dag, á morgun, vikudag eða eftir N daga.",
+    "en": "Weather also accepts a date: today, tomorrow, weekday, or in N days.",
+    "sco": "Wather taks a date tae: the day, the morn, weekday, or in N days.",
+    "de": "Wetter nimmt auch ein Datum: heute, morgen, Wochentag oder in N Tagen.",
+    "nl": "Weer accepteert ook een datum: vandaag, morgen, weekdag of over N dagen.",
+    "pl": "Pogoda przyjmuje też datę: dzisiaj, jutro, dzień tygodnia lub za N dni.",
+    "fi": "Sääennusteeseen voi lisätä päivän: tänään, huomenna, viikonpäivä tai N päivän päästä.",
+}
+
+
+def help_messages(language="no"):
+    labels = HELP_LABELS.get(language, HELP_LABELS["en"])
+    groups = (
+        (labels[0], ["ping", "pang", "jalla", "teisen", "theisen"]),
+        (
+            labels[1],
+            [
+                "hei", "heisann", "hallo", "hej", "hallå", "dav",
+                "goddag", "hæ", "halló", "hello", "hi", "hullo",
+                "moin", "guten tag", "hoi", "goedendag", "cześć",
+                "czesc", "hejka", "moi", "terve",
+            ],
+        ),
+        (f"{labels[2]} <target>", [f"{word} <target>" for word in KICK_WORDS]),
+        (
+            labels[3],
+            [
+                *SOURCE_WORDS,
+                "dansk kilde",
+                "dansk kildekode",
+            ],
+        ),
+        (f"{labels[4]} <place>", list(WEATHER_WORDS)),
+    )
+
+    messages = []
+    for label, commands in groups:
+        line = f"{label}:"
+        for command in commands:
+            item = f" ,{command}"
+            if len(line) + len(item) > 110 and line != f"{label}:":
+                messages.append(line)
+                line = f"{label}:"
+            line += item
+        messages.append(line)
+
+    messages.append(HELP_DATE_HINTS.get(language, HELP_DATE_HINTS["en"]))
+    return messages
 
 
 # ----------------------------------------------------------------------
@@ -684,8 +807,8 @@ def parse_forecast_day(text: str):
 
     relative_day_patterns = (
         # Norsk bokmål/nynorsk, svensk, dansk, engelsk, tysk, nederlandsk
-        r"\b(?:om|in)\s+(\d+)\s+"
-        r"(?:dag|dager|dagar|dagen|dagene|days?|tage|tagen)\s*$",
+        r"\b(?:om|in|over)\s+(\d+)\s+"
+        r"(?:dag|dage|dager|dagar|dagen|dagene|days?|tage|tagen)\s*$",
 
         # Islandsk: eftir 3 daga
         r"\beftir\s+(\d+)\s+daga\s*$",
@@ -710,8 +833,8 @@ def parse_forecast_day(text: str):
     )
 
     weekday_match = re.search(
-        rf"(?:\b(?:på|next|am|kommende|neste|"
-        rf"następny|następna|ensi)\s+)?"
+        rf"(?:\b(?:på|next|am|kommende|neste|nästa|næsta|"
+        rf"volgende|á|w|we|następny|następna|ensi)\s+)?"
         rf"({weekday_names})\s*$",
         folded,
     )
@@ -741,13 +864,21 @@ def weather_request(command: str):
     if not words:
         return False, None, None, None
 
-    first = words[0].casefold()
+    first = normalize_command_text(words[0])
 
     # Enkel form: ,vær Oslo i morgon / ,weather Edinburgh tomorrow
-    if first in WEATHER_WORDS:
-        language = WEATHER_WORDS[first]
+    language = lookup_command_word(first, WEATHER_WORDS)
+    if language is not None:
+        place_text = " ".join(words[1:]).strip()
+        place_match = re.match(
+            r"^(?:i|in|í|ì|w|we)\s+(.+)$",
+            place_text,
+            re.IGNORECASE,
+        )
+        if place_match:
+            place_text = place_match.group(1)
         place, forecast_day = parse_forecast_day(
-            " ".join(words[1:]).strip()
+            place_text
         )
         return True, place or None, language, forecast_day
 
@@ -760,9 +891,10 @@ def weather_request(command: str):
             "",
             word.casefold(),
         )
+        clean = normalize_command_text(clean)
 
-        if clean in WEATHER_WORDS:
-            language = WEATHER_WORDS[clean]
+        language = lookup_command_word(clean, WEATHER_WORDS)
+        if language is not None:
             break
 
     if language is None:
@@ -771,7 +903,7 @@ def weather_request(command: str):
     # For eksempel «hvordan er været i Oslo» eller
     # «what is the weather in Edinburgh».
     match = re.search(
-        r"\b(?:i|in)\s+(.+)$",
+        r"\b(?:i|in|í|ì|w|we)\s+(.+)$",
         command,
         re.IGNORECASE,
     )
@@ -1023,11 +1155,40 @@ def format_daily_forecast(place, target_date, entries, language):
         if condition:
             parts.append(condition)
 
+    precipitation_units = {
+        "nn": "mm / 6 t",
+        "no": "mm / 6 t",
+        "sv": "mm / 6 tim",
+        "da": "mm / 6 timer",
+        "is": "mm / 6 klst.",
+        "en": "mm / 6 h",
+        "sco": "mm / 6 oors",
+        "de": "mm / 6 Std.",
+        "nl": "mm / 6 uur",
+        "pl": "mm / 6 godz.",
+        "fi": "mm / 6 h",
+    }
+    wind_labels = {
+        "nn": "vind",
+        "no": "vind",
+        "sv": "vind",
+        "da": "vind",
+        "is": "vindur",
+        "en": "wind",
+        "sco": "wind",
+        "de": "Wind",
+        "nl": "wind",
+        "pl": "wiatr",
+        "fi": "tuuli",
+    }
+
     if precipitation is not None:
-        parts.append(f"{precipitation:g} mm / 6 t")
+        unit = precipitation_units.get(language, precipitation_units["en"])
+        parts.append(f"{precipitation:g} {unit}")
 
     if wind is not None:
-        parts.append(f"vind {wind:g} m/s")
+        label = wind_labels.get(language, wind_labels["en"])
+        parts.append(f"{label} {wind:g} m/s")
 
     if not parts:
         return None
@@ -1291,7 +1452,11 @@ async def main():
             return
 
         # Andre kommandoer
-        cmd = command.lower().strip()
+        if command.casefold().strip() == "halló":
+            await reply(channel_idx, f"Halló {sender}!")
+            return
+
+        cmd = normalize_command_text(command.strip())
 
         match cmd:
             case "teisen" | "theisen":
@@ -1314,7 +1479,7 @@ async def main():
                 await reply(channel_idx, f"Hei {sender}!")
 
             # Svensk
-            case "hej" | "hallå":
+            case "hej" | "halla":
                 await reply(channel_idx, f"Hej {sender}!")
 
             # Dansk
@@ -1322,7 +1487,7 @@ async def main():
                 await reply(channel_idx, f"Dav {sender}!")
 
             # Islandsk
-            case "hæ" | "halló":
+            case "hae":
                 await reply(channel_idx, f"Halló {sender}!")
 
             # Engelsk
@@ -1349,12 +1514,11 @@ async def main():
             case "moi" | "terve":
                 await reply(channel_idx, f"Moi {sender}!")
 
-            case "help" | "hjelp":
-                await reply(
-                    channel_idx,
-                    ",ping ,pang ,kick <navn> ,spark <navn> ,vær <sted> "
-                    "[i dag/i morgon/ukedag/om N dagar] ,kilde",
-                )
+            case _ if lookup_command_word(cmd, HELP_WORDS) is not None:
+                for help_message in help_messages(
+                    lookup_command_word(cmd, HELP_WORDS)
+                ):
+                    await reply(channel_idx, help_message)
 
             # Ukjent kommando: vær stille.
             case _:
