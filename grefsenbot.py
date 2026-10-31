@@ -604,74 +604,23 @@ HELP_WORDS = {
 }
 
 
-HELP_LABELS = {
-    "nn": ("Kommandoar", "Helsingar", "Spark", "Kjelde", "Vêr"),
-    "no": ("Kommandoer", "Hilsener", "Spark", "Kilde", "Vær"),
-    "sv": ("Kommandon", "Hälsningar", "Sparka", "Källa", "Väder"),
-    "da": ("Kommandoer", "Hilsner", "Spark", "Kilde", "Vejr"),
-    "is": ("Skipanir", "Kveðjur", "Sparka", "Heimild", "Veður"),
-    "en": ("Commands", "Greetings", "Kick", "Source", "Weather"),
-    "sco": ("Commands", "Greetins", "Skelp", "Soorce", "Wather"),
-    "de": ("Befehle", "Grüße", "Tritt", "Quelle", "Wetter"),
-    "nl": ("Opdrachten", "Begroetingen", "Schop", "Bron", "Weer"),
-    "pl": ("Polecenia", "Powitania", "Kopnij", "Źródło", "Pogoda"),
-    "fi": ("Komennot", "Tervehdykset", "Potkaise", "Lähde", "Sää"),
-}
-
-
-HELP_DATE_HINTS = {
-    "nn": "Vêr tek òg dato: i dag, i morgon, vekedag eller om N dagar.",
-    "no": "Vær tar også dato: i dag, i morgen, ukedag eller om N dager.",
-    "sv": "Väder tar även datum: idag, imorgon, veckodag eller om N dagar.",
-    "da": "Vejr tager også dato: i dag, i morgen, ugedag eller om N dage.",
-    "is": "Veður tekur líka dagsetningu: í dag, á morgun, vikudag eða eftir N daga.",
-    "en": "Weather also accepts a date: today, tomorrow, weekday, or in N days.",
-    "sco": "Wather taks a date tae: the day, the morn, weekday, or in N days.",
-    "de": "Wetter nimmt auch ein Datum: heute, morgen, Wochentag oder in N Tagen.",
-    "nl": "Weer accepteert ook een datum: vandaag, morgen, weekdag of over N dagen.",
-    "pl": "Pogoda przyjmuje też datę: dzisiaj, jutro, dzień tygodnia lub za N dni.",
-    "fi": "Sääennusteeseen voi lisätä päivän: tänään, huomenna, viikonpäivä tai N päivän päästä.",
+HELP_USAGE = {
+    "nn": "Døme ,vêr Oslo i morgon; dato i dag|vekedag|om N dagar; ,spark-ut <namn>; ,kjelde; ,ping ,pang ,jalla",
+    "no": "Eksempel: ,vær Oslo i morra (også i dag/ukedag/om N dager); ,spark <navn>; ,kilde; ,ping; ,pang; ,jalla; ,teisen",
+    "sv": "Exempel ,väder Oslo imorgon; datum idag|veckodag|om N dagar; ,sparka <namn>; ,kalla; ,ping ,pang ,jalla",
+    "da": "Eksempel ,vejr Oslo i morgen; dato i dag|ugedag|om N dage; ,los <navn>; ,dansk kilde; ,ping ,pang ,jalla",
+    "is": "Dæmi ,veður Reykjavík á morgun; dagsetning í dag|vikudagur|eftir N daga; ,sparkaðu <nafn>; ,heimild; ,ping",
+    "en": "Example ,weather Oslo tomorrow; date today|weekday|in N days; ,kick <name>; ,source; ,ping ,pang ,jalla",
+    "sco": "Example ,wather Oslo tomorrow; date today|weekday|in N days; ,skelp <name>; ,soorce; ,ping ,pang ,jalla",
+    "de": "Beispiel ,wetter Oslo morgen; Datum heute|Wochentag|in N Tagen; ,tritt <Name>; ,quelle; ,ping ,pang",
+    "nl": "Voorbeeld ,weer Oslo morgen; datum vandaag|weekdag|over N dagen; ,schop <naam>; ,bron; ,ping ,pang",
+    "pl": "Przykład ,pogoda Warszawa jutro; data dzisiaj|dzień tygodnia|za N dni; ,kopnij <nazwa>; ,źródło; ,ping",
+    "fi": "Esim. ,sää Helsinki huomenna; päivä tänään|viikonpäivä|N päivän päästä; ,potkaise <nimi>; ,lähde; ,ping",
 }
 
 
 def help_messages(language="no"):
-    labels = HELP_LABELS.get(language, HELP_LABELS["en"])
-    groups = (
-        (labels[0], ["ping", "pang", "jalla", "teisen", "theisen"]),
-        (
-            labels[1],
-            [
-                "hei", "heisann", "hallo", "hej", "hallå", "dav",
-                "goddag", "hæ", "halló", "hello", "hi", "hullo",
-                "moin", "guten tag", "hoi", "goedendag", "cześć",
-                "czesc", "hejka", "moi", "terve",
-            ],
-        ),
-        (f"{labels[2]} <target>", [f"{word} <target>" for word in KICK_WORDS]),
-        (
-            labels[3],
-            [
-                *SOURCE_WORDS,
-                "dansk kilde",
-                "dansk kildekode",
-            ],
-        ),
-        (f"{labels[4]} <place>", list(WEATHER_WORDS)),
-    )
-
-    messages = []
-    for label, commands in groups:
-        line = f"{label}:"
-        for command in commands:
-            item = f" ,{command}"
-            if len(line) + len(item) > 110 and line != f"{label}:":
-                messages.append(line)
-                line = f"{label}:"
-            line += item
-        messages.append(line)
-
-    messages.append(HELP_DATE_HINTS.get(language, HELP_DATE_HINTS["en"]))
-    return messages
+    return [HELP_USAGE.get(language, HELP_USAGE["en"])]
 
 
 # ----------------------------------------------------------------------
@@ -1318,13 +1267,6 @@ async def main():
             text,
         )
 
-        logger.debug(
-            "RX %s %r: %r",
-            CHANNELS[channel_idx],
-            sender,
-            command,
-        )
-
         if result.type == EventType.ERROR:
             logger.error(
                 "TX-feil på %s: %r",
@@ -1515,9 +1457,10 @@ async def main():
                 await reply(channel_idx, f"Moi {sender}!")
 
             case _ if lookup_command_word(cmd, HELP_WORDS) is not None:
-                for help_message in help_messages(
+                messages = help_messages(
                     lookup_command_word(cmd, HELP_WORDS)
-                ):
+                )
+                for help_message in messages:
                     await reply(channel_idx, help_message)
 
             # Ukjent kommando: vær stille.
